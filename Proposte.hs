@@ -1,20 +1,17 @@
-{-# LANGUAGE TemplateHaskell,NoMonomorphismRestriction, DataKinds, GADTs, KindSignatures, StandaloneDeriving, FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE  DataKinds, GADTs, KindSignatures,  FlexibleContexts #-}
 
-module P where
+module Proposte  where
 
-import Data.DeriveTH
 import Data.Set
-import Data.Binary
-import Control.Monad (liftM2)
 
 -- | linguaggio di programmazione filtri
-data Filtro a = Aperto | Include a | Esclude a | Oppure (Filtro a) (Filtro a) | Inoltre (Filtro a) (Filtro a) 
+data Filtro a = Aperto | Includi a | Escludi a | Oppure (Filtro a) (Filtro a) | Inoltre (Filtro a) (Filtro a) 
 
 -- | controlla la passabilità di un insieme di tag per un filtro
 test :: Ord a => Set a -> Filtro a -> Bool
 test s Aperto = True
-test s (Include x) = x `member` s
-test s (Esclude x) = not $ x `member` s
+test s (Includi x) = x `member` s
+test s (Escludi x) = not $ x `member` s
 test s (Oppure x y) = test s x  || test s y
 test s (Inoltre x y) = test s x  && test s y 
 
@@ -30,16 +27,17 @@ data Descrizione :: * -> TipoProposta -> * where
 data TipoLimite = Inferiore | Superiore
 
 -- | valori di limite
-data Limite :: * -> TipoLimite -> * where
+data Limite :: * -> TipoLimite -> TipoProposta -> * where
+	Quantificato :: Int -> q -> Limite q Superiore Offerta 
 	--  limite generico
-	Limitato :: q -> Limite q l
+	Limitato :: q -> Limite q l p
 	--  limite inferiore assente
-	Zero :: Limite q Inferiore
+	Zero :: Limite q Inferiore Domanda
 	--  limite inferiore non nullo obbligatorio
-	Obbligatorio :: q -> Limite q Inferiore
+	Obbligatorio :: q -> Limite q Inferiore Domanda
 	
 
-erroreLimiteInferiore :: (Ord q, Num q) => q -> Limite q Inferiore -> Maybe q
+erroreLimiteInferiore :: (Ord q, Num q) => q -> Limite q Inferiore p -> Maybe q
 erroreLimiteInferiore x (Limitato y) 
 	| x == 0 = Nothing
 	| x < y = Just (y - x)
@@ -50,81 +48,27 @@ erroreLimiteInferiore x (Obbligatorio y)
 	| x > y = Nothing
 	| otherwise = Just (y - x)
 
-erroreLimiteSuperiore :: (Ord q, Num q) => q -> Limite q Superiore -> Maybe q
+erroreLimiteSuperiore :: (Ord q, Num q) => q -> Limite q Superiore p -> Maybe q
 erroreLimiteSuperiore x (Limitato y)
 	| x > y = Just (x - y)
 	| otherwise = Nothing
+erroreLimiteSuperiore x (Quantificato n y) = erroreLimiteSuperiore x (Limitato $ fromIntegral n * y)
 
+-- | valutazioni sulle quantità. Per la domanda sono esprimibili sia limite inferiore che superiore, per l'offerta solo il superiore. L'opzione 'Assente' vale per tutti e due i casi e annulla le quantità.
 data Quantità :: * -> TipoProposta -> *  where 
-	Acquisto :: Limite q Inferiore -> Limite q Superiore -> Quantità q Domanda
-	Vendita :: Limite q Superiore -> Quantità q Offerta
+	Acquisto :: Limite q Inferiore Domanda -> Limite q Superiore Domanda -> Quantità q Domanda
+	Vendita :: Limite q Superiore Offerta -> Quantità q Offerta
 	Assente :: Quantità q l
 
 
--- | proposte di offerta e domanda complete
+-- | proposte di offerta e domanda complete. 
 data Proposta :: * -> * -> TipoProposta -> *  where
 	Proposta :: Descrizione a l -> [Quantità q l] -> Proposta a q l
 
-pr = Proposta (Definizione $ fromList [1,2,3]) [Assente, Assente, Vendita (Limitato 10), Vendita (Limitato 12), Vendita (Limitato 8)]
-ri = Proposta (Filtro $ Include 1) [Assente, Acquisto Zero (Limitato 3), Acquisto (Limitato 4) (Limitato 3), Acquisto (Obbligatorio 3) (Limitato 5)]
 
+---------------------------------------------------
+--------------------- parser ----------------------
+---------------------------------------------------
 
-----------------------------------------------
--- istanze di classe -------------------------
-----------------------------------------------
-
-deriving instance Eq a => Eq (Filtro a)
-deriving instance Show a => Show (Filtro a)
-	
-$(derive makeBinary ''Filtro)
-
-deriving instance Eq a => Eq (Descrizione a b)
-deriving instance Show a => Show (Descrizione a b)
-instance (Ord a, Binary a) => Binary (Descrizione a Offerta) where
-	put (Definizione s) = put s
-	get = Definizione `fmap` get 
-
-instance (Ord a, Binary a) => Binary (Descrizione a Domanda) where
-	put (Filtro f) = put f
-	get = Filtro `fmap` get
-
-[z,u,d,t] = [0,1,2,3] :: [Word8]
-
-deriving instance Show q => Show (Limite q b)
-instance Binary q => Binary (Limite q Inferiore) where
-	put Zero = put z
-	put (Obbligatorio q) = put u >> put q
-	put (Limitato q) = put d >> put q
-	get = do	t <- getWord8
-			case t of
-				0 -> return Zero
-				1 -> Obbligatorio `fmap` get
-				2 -> Limitato `fmap` get
-instance Binary q => Binary (Limite q Superiore) where
-	put (Limitato q) = put q
-	get = Limitato `fmap` get
-	
-
-deriving instance Show q => Show (Quantità q b)
-instance Binary q => Binary (Quantità q Domanda) where
-	put (Acquisto li ls) = put z >> put li >> put ls
-	put Assente = put u 
-	get = do	t <- getWord8
-			case t of
-				0 -> liftM2 Acquisto get get
-				1 -> return Assente
-
-instance Binary q => Binary (Quantità q Offerta) where
-	put (Vendita ls) = put z >> put ls
-	put Assente = put u 
-	get = do	t <- getWord8
-			case t of
-				0 -> Vendita `fmap` get
-				1 -> return Assente
-
-deriving instance (Show q, Show a) => Show (Proposta a q l)
-instance (Binary a, Binary q, Binary (Descrizione a l), Binary (Quantità q l)) => Binary (Proposta a q l) where
-	put (Proposta d es) = put d >> put es
-	get = liftM2 Proposta get get
 
 
