@@ -1,8 +1,12 @@
-{-# LANGUAGE  DataKinds, GADTs, KindSignatures,  FlexibleContexts #-}
+{-# LANGUAGE  DataKinds, GADTs, KindSignatures,  FlexibleContexts, TypeFamilies, PolyKinds #-}
 
 module Proposte  where
 
-import Data.Set
+import Data.Set hiding (map)
+import Data.Ord
+import Data.Function
+import Data.List hiding (insert)
+import Control.Arrow
 
 -- | linguaggio di programmazione filtri
 data Filtro a = Aperto | Includi a | Escludi a | Oppure (Filtro a) (Filtro a) | Inoltre (Filtro a) (Filtro a) 
@@ -15,14 +19,35 @@ test s (Escludi x) = not $ x `member` s
 test s (Oppure x y) = test s x  || test s y
 test s (Inoltre x y) = test s x  && test s y 
 
+
 -- | distinzione tra l'apporto di merce ed il prelievo
 data TipoProposta = Offerta | Domanda
 
--- | una descrizione è un insieme di valori, distinguiamo con il verso i valori che definiscono le merci e i valori che li filtrano 
-data Descrizione :: * -> TipoProposta -> * where 
-	Definizione :: Ord a => Set a -> Descrizione a Offerta
-	Filtro :: Ord a => Filtro a -> Descrizione a Domanda
+data TipoUtente = Esterno | Interno
+ 
+data  Tags a c l where
+	Fuori :: a -> c a -> Tags a c Esterno
+	Dentro :: c a -> Tags a c Interno
 
+-- | una descrizione è un insieme di valori, distinguiamo con il verso i valori che definiscono le merci e i valori che li filtrano 
+data Descrizione  :: * -> TipoProposta -> TipoUtente -> * where 
+	Prodotto :: Ord a => Tags a Set l -> Descrizione a Offerta l
+	Filtro :: Ord a => Tags a Filtro l -> Descrizione a Domanda l
+
+gruppa :: Ord a => [Descrizione a o Esterno] -> [(a,[Descrizione a o Interno])]
+gruppa = map (fst . head &&& map snd) . groupBy ((==) `on` fst) . sortBy (comparing fst) . map g  where
+	g :: Ord a => Descrizione a o Esterno -> (a,Descrizione a o Interno)
+	g (Prodotto (Fuori u s)) = (u,Prodotto $ Dentro $ u `insert` s)
+	g (Filtro (Fuori u f)) = (u,Filtro $ Dentro f) 
+
+data Dati a l where 
+	Boot :: [Descrizione a Offerta Esterno] -> [Descrizione a Domanda Esterno] -> Dati a Esterno
+	Ready :: [(a,[Descrizione a Offerta Interno])] -> [(a,[Descrizione a Domanda Esterno])] -> Dati a Interno
+	
+	}
+
+	
+{-
 -- | tipi di limite
 data TipoLimite = Inferiore | Superiore
 
@@ -66,9 +91,11 @@ data Proposta :: * -> * -> TipoProposta -> *  where
 	Proposta :: Descrizione a l -> [Quantità q l] -> Proposta a q l
 
 
+
+
+
 ---------------------------------------------------
 --------------------- parser ----------------------
 ---------------------------------------------------
 
-
-
+-}

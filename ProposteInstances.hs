@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, FlexibleContexts, FlexibleInstances, StandaloneDeriving, DataKinds, GADTs #-}
+{-# LANGUAGE TemplateHaskell, FlexibleContexts, FlexibleInstances, StandaloneDeriving, DataKinds, GADTs, TypeFamilies #-}
 module ProposteInstances () where
 
 import Test.HUnit
@@ -19,11 +19,11 @@ $(derive makeBinary ''Filtro)
 
 deriving instance Eq a => Eq (Descrizione a b)
 deriving instance Show a => Show (Descrizione a b)
-instance (Ord a, Binary a) => Binary (Descrizione a Offerta) where
+instance (Ord (Prodotto a), Binary (Prodotto a)) => Binary (Descrizione (Prodotto a) Offerta) where
 	put (Definizione s) = put s
 	get = Definizione `fmap` get 
 
-instance (Ord a, Binary a) => Binary (Descrizione a Domanda) where
+instance (Ord (Prodotto Domanda), Binary (Prodotto Domanda)) => Binary (Descrizione (Prodotto Domanda) Domanda) where
 	put (Filtro f) = put f
 	get = Filtro `fmap` get
 
