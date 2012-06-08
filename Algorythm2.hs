@@ -1,14 +1,17 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, TypeFamilies, DataKinds, GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, TypeFamilies, DataKinds, GADTs, BangPatterns #-}
 import Data.Array
 import Data.Ix
 import Data.Ratio
 import Control.Arrow
 import System.Random
 import System.Random.Shuffle
+import Data.Traversable
+import Control.Monad
+import Data.Foldable hiding (concatMap)
 
 import Genetica2 
 
-newtype Utente = Utente Int deriving (Ord,Ix,Eq, Num)
+newtype Utente = Utente Int deriving (Ord,Ix,Eq, Num, Enum)
 newtype Prodotto = Prodotto Int deriving (Ord,Ix,Eq)
 
 newtype Quantità = Quantità Rational deriving (Num, Ord, Eq)
@@ -58,27 +61,49 @@ flex :: [Rapporto] -> Bool
 flex [] = False
 flex [_] = False
 flex [_,_] = False
-flex ((vm,_):(vx,_):(vM,_):_) = vx >= vm && vx >= vM
+flex (vm:vx:vM:_) = vx >= vm && vx >= vM
 
 
-opera :: StdGen -> Ranks -> Matrice Interesse -> Matrice Quantità -> Matrice Quantità
-opera = undefined
+opera :: Bounds -> StdGen -> Quanti -> Ranks -> Matrice Interesse -> Matrice Quantità -> Matrice Quantità
+opera b@(Bounds (u,_)) s qs rs mi mq = let 
+	ijs = zip `ap` drop (fromEnum u `div` 2) $ shuffle' [1..u] (fromEnum u) s
+	in svolgiOperazione  b  rs qs (zipMatrice mi mq) ijs
+	{-
+	zippa matrici
+	prendi coppie di colonne
+-}
 
-modifica :: Bounds -> Quanti -> Ranks -> Matrice Interesse -> StdGen -> Matrice Quantità -> (Rapporto, Matrice Quantità)
-modifica b@(Bounds (u,p)) qs rs mi s mq =  modifica' s [valutazione mq] mq where
-	modifica' :: StdGen -> [Rapporto] -> Matrice Quantità -> (Rapporto, Matrice Quantità)
-	modifica' s pvs  mq@(Matrice aq) = let
+zipMatrice :: Matrice a -> Matrice b -> Matrice (a,b)
+zipMatrice (Matrice m1) (Matrice m2) = Matrice . snd $ mapAccumL (\(x:xs) y -> (xs,zip x y)) (toList m1) m2
+
+
+svolgiOperazione :: Bounds -> Ranks -> Quanti -> Matrice (Interesse,Quantità) -> [(Utente,Utente)] -> Matrice Quantità
+svolgiOperazione (Bounds (u,_)) rs qs (Matrice m) ijs = Matrice $ array (1,u) $ concatMap coppie ijs
+	where coppie (i,j) = let
+		(i',j') = if rs ! i <= rs ! j then (i,j) else (j,i)
+		(mi',mi'') = unzip $ mix qs (m ! i') (m ! j')
+		in [(i',mi'), (j',mi'')]
+
+
+
+
+newtype Limite = Limite Int deriving (Num,Ord,Eq)
+
+modifica :: Bounds -> Limite -> Quanti -> Ranks -> Matrice Interesse -> StdGen -> Matrice Quantità -> (Rapporto, Matrice Quantità)
+modifica b@(Bounds (u,_)) l qs rs mi s mq =  modifica' s (Limite 0) [valutazione mq] mq where
+	modifica' :: StdGen -> Limite -> [Rapporto] -> Matrice Quantità -> (Rapporto, Matrice Quantità)
+	modifica' s !n pvs  mq@(Matrice aq) = let
 		(s',_) = split s 
-		mq' = opera s rs mi mq
+		mq' = opera b s qs rs mi mq
 		nvs = (:pvs) $ valutazione mq'
-		in case flex nvs of
+		in case flex nvs || n >= l of
 			True -> (head nvs, mq)
-			False -> modifica' s' nvs mq'
+			False -> modifica' s' (n + 1) nvs mq'
 
 
-operatore ::  Bounds -> Quanti -> Ranks -> Matrice Interesse -> StdGen -> Elemento (Variazioni Soluzioni) (Matrice Quantità) 
-operatore b q r mi = Operatore . f  where
-	f s (Soluzione mq) = (operatore b q r mi (fst . split $ s), second Soluzione $ modifica b q r mi s mq) 
+operatore ::  Bounds -> Limite -> Quanti -> Ranks -> Matrice Interesse -> StdGen -> Elemento (Variazioni Soluzioni) (Matrice Quantità) 
+operatore b l q r mi = Operatore . f  where
+	f s (Soluzione mq) = (operatore b l q r mi (fst . split $ s), second Soluzione $ modifica b l q r mi s mq) 
 		
 soluzione :: Matrice Quantità -> Elemento Soluzioni (Matrice Quantità)
 soluzione = Soluzione
