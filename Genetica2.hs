@@ -39,14 +39,13 @@ newtype Taglio n a = Taglio (Variazione (Contenitore (Elemento n a) (Valutato (E
 
 type Superiore n a = Contenitore (Elemento (Variazioni n) a) (Elemento (Variazioni n) a)
 
-newtype Crescita n a = Crescita (Variazione (Superiore n a))
+newtype Crescita n a = Crescita ((Variazione (Superiore n a), Crescita n a))
 
 
 passo :: (Num (Valore a), Monoid (Inferiore n a), Traversable (Contenitore (Elemento n a)), Traversable (Contenitore (Elemento (Variazioni n) a)))
 	=> Taglio n a
 	-> Taglio (Variazioni n) a
-	-> Crescita n a
-	-> Variazione (Superiore n a, Inferiore n a)
-passo (Taglio ps) (Taglio po) g (os, es) = (\x -> (eops x, esols x)) .  fmap (operazione es) $ os where
-	eops = fmap snd . po . fmap fst
+	-> Variazione (Crescita n a, Superiore n a, Inferiore n a)
+passo (Taglio ps) (Taglio po) (Crescita (g,c'), os, es) = (\x -> (c',eops x, esols x)) .  fmap (operazione es) $ os where
+	eops = g . fmap snd . po . fmap fst
 	esols = ps . mconcat . (es:) . toList . fmap snd

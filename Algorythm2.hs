@@ -80,11 +80,14 @@ valutazione vg (Matrice mq) = foldr f 0 (zipArray g vg mq) where
 	f bs (Rapporto r) = let (rs,ws) = foldr (\x (rs,ws) -> if x then (rs + 1, ws) else (rs,ws + 1)) (1,1) bs 
 		in Rapporto $ r + rs / ws
 
+
+mix n = zip `ap` drop (n `div` 2) . shuffle' [1..n] n 
+
  
 newtype Limite = Limite Int deriving (Num,Ord,Eq)
 
 newtype Giudizi = Giudizi (DatiUtente [Giudizio])
-
+-----------------------------------------------------------------------------
 operatore 	::   	Limite 	-- ^ numero massimo di iterazioni a caccia del massimo
 		-> 	Quanti  -- ^ quantità unitarie di trasferimento
 		-> 	Ranks 	-- ^ classifica di biasimo
@@ -102,7 +105,7 @@ operatore l qs rs (Giudizi gs) (Matrice mi) = Operatore . f
 				corri s !n pvs mq@(Matrice aq) = if	flex nvs || n >= l 
 							then 	(nvs !! 1, mq) 
 							else  	corri (newGen s) (n + 1) nvs nmq 
-					where	ijs 	= zip `ap` drop (fromEnum u `div` 2) $ shuffle' [1..u] (fromEnum u) s
+					where	ijs 	= mix (fromEnum u) s
 						nmq 	= Matrice $ array (1,u) $ concatMap coppie ijs 
 						nvs 	= valutazione gs nmq : pvs
 						miq 	= zipArray (zipArray (,)) mi aq
@@ -114,7 +117,15 @@ operatore l qs rs (Giudizi gs) (Matrice mi) = Operatore . f
 
 soluzione :: Matrice Quantità -> Elemento Soluzioni (Matrice Quantità)
 soluzione = Soluzione
+-----------------------------------------------------------------------
 
-tagliaSoluzioni n xs = take n $ sortBy (comparing (negate . fst)) $ elems xs
-tagliaOperatori = tagliaSoluzioni
-
+tagliaSoluzioni :: Int -> Taglio Soluzioni (Matrice Quantità)
+tagliaSoluzioni n = Taglio $ take n . sortBy (flip $ comparing fst) 
+tagliaOperatori :: Int -> Taglio (Variazioni Soluzioni) (Matrice Quantità)
+tagliaOperatori n = Taglio $ take n . sortBy (flip $ comparing fst) 
+crescitaOperatori n k s = Crescita (f s k ,crescitaOperatori n k $ newGen s) where
+	f s 0 xs = xs
+	f s l xs = map g (mix n xs) ++ f (newGen s) (l - 1) xs
+		where g (Matrice i, Matrice j) = zipMatrice i j
+type instance Contenitore (Elemento Soluzioni (Matrice Quantità)) = []
+type instance Contenitore (Elemento (Variazioni Soluzioni) (Matrice Quantità)) = []
