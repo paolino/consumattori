@@ -59,6 +59,6 @@ passo (Taglio ps) (Taglio po) (Crescita g) (os, es) = do
 		(v,ns) <- operazione es o
 		return ((v,o),ns)
 	ops <- g . fmap snd . po . fmap fst $ qs
-	sols <- return . ps . mconcat . (es:) . toList . fmap snd $ qs
+	sols <- return . ps . mconcat . ( ++ [es]) . toList . fmap snd $ qs
 	return (ops, sols)
 

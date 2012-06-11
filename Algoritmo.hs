@@ -53,22 +53,25 @@ newtype Rapporto = Rapporto Rational deriving (Ord, Eq, Num, Show)
 
 
 
-flex :: [Rapporto] -> Bool
-flex [] = False
-flex [_] = False
-flex [_,_] = False
-flex (vm:vx:vM:_) = vx >= vm && vx >= vM
+flex :: [Int] -> Bool
+flex _ = False
+-- flex [] = False
+-- flex [_] = False
+-- flex (x:y:_) = x > y
+-- flex (vm:vx:vM:_) = if vx >= vm && vx >= vM
 
 data Giudizio = Giudizio [Prodotto] (Quantità -> Bool)
 newtype Giudizi = Giudizi (DatiUtente [Giudizio])
 
-valutazione :: Giudizi ->  Matrice Quantità -> Rapporto
-valutazione (Giudizi vg) (Matrice mq) = foldr f 0 (zipArray g vg mq) where
+giudizi :: Giudizi ->  Matrice Quantità -> DatiUtente [Bool]
+giudizi (Giudizi vg) (Matrice mq) = zipArray g vg mq where
 	g :: [Giudizio] -> DatiProdotto Quantità -> [Bool]
 	g gs aq = map (\(Giudizio ps fq) -> fq . sum . map (aq !) $ ps) gs
-	f :: [Bool] -> Rapporto -> Rapporto 
-	f bs (Rapporto r) = let (rs,ws) = foldr (\x (rs,ws) -> if x then (rs + 1, ws) else (rs,ws + 1)) (1,1) bs 
-		in Rapporto $ r + rs / ws
+
+valutazione :: Giudizi ->  Matrice Quantità -> Int
+valutazione vg mq = foldr f 0 (giudizi vg mq) where
+	f :: [Bool] -> Int -> Int
+	f bs n = n + length (filter id bs)
 
 
  

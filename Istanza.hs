@@ -8,17 +8,19 @@ import System.Random (StdGen, split, Random (..))
 import System.Random.Shuffle (shuffleM)
 import Control.Monad.Random (Rand, MonadRandom, getRandom, runRand, evalRand)
 import Control.Applicative ((<$>)) 
-import Data.Array (listArray, array, elems, bounds, (!))
+import Data.Array (accumArray, listArray, array, elems, bounds, (!))
 import Control.Arrow (second) 
 import Data.Traversable (mapM)
 import Control.Monad (ap, liftM2, replicateM)
 import Control.Conditional ((??))
 import Data.Foldable (concatMap)
 import Data.Ratio (approxRational)
+import Data.List (maximumBy)
+import Data.Ord (comparing)
 import Genetica
 import Algoritmo
 
-type instance Valore (Matrice Quantità) = Rapporto
+type instance Valore (Matrice Quantità) = Int
 type Operatori = Variazioni Soluzioni
 type Consegna = Matrice Quantità
 type Volontà = Matrice Interesse
@@ -43,8 +45,13 @@ instance Random Interesse where
 	random g = let (x,g') = random g in (toEnum (x `mod` 3), g')
 	randomR = undefined
 
-mix :: (Functor m, MonadRandom m) => Int -> [a] -> m [(a,a)]
-mix n xs = (zip `ap` drop (n `div` 2)) <$> shuffleM xs
+mix :: (Functor m, MonadRandom m) => Int -> [a] -> m ([(a,a)], Maybe a)
+mix n xs = do 
+	ys <- shuffleM xs
+	let (n2,x) = n `divMod` 2
+	return $ if x == 0 then 
+		 (zip `ap` drop n2 $ ys,Nothing) 
+		else (zip `ap` drop n2 $ tail ys,Just $ head ys) 
 
 -- | costruisce un operatore a partire dalle sue volontà, una matrice di 'Interesse', utente x prodotto
 operatore 	:: Parametri 			-- ^ parametri comuni agli operatori
@@ -52,20 +59,19 @@ operatore 	:: Parametri 			-- ^ parametri comuni agli operatori
 		-> Elemento Operatori Consegna 	-- ^ operatore di primo livello
 
 operatore (Parametri l qs gs _ _ _) (Matrice mi) = Operatore (Matrice mi) f where 
-		f (Soluzione mq) =  second Soluzione <$> corri (Limite 0) [valutazione gs mq] mq 
+		f (Soluzione mq) =  second Soluzione . maximumBy (comparing fst) <$> corri (Limite 0) mq 
 		(1,u) = bounds mi
-		corri :: Limite -> [Rapporto] -> Consegna -> Rand StdGen (Rapporto,Consegna)
-		corri !n pvs mq@(Matrice aq) = do
-			ijs 	<- mix (fromEnum u) [1 .. u]
-			let 	nmq 	= Matrice $ array (bounds mi) $ concatMap coppie ijs 
-				nvs 	= valutazione gs nmq : pvs
+		corri :: Limite -> Consegna -> Rand StdGen [(Int,Consegna)]
+		corri !n mq@(Matrice aq) = do
+			(ijs,r) <- mix (fromEnum u) [1 .. u]
+			let 	nmq 	= Matrice $ array (bounds mi) $ concatMap coppie ijs ++ maybe [] (\r -> [(r, aq ! r)]) r
 				miq 	= zipArray (zipArray (,)) mi aq
 				coppie (i,j) = [(i',listArray (bounds qs) mi'), (j',listArray (bounds qs) mi'')] 
 					where	(i',j') 	= if i <= j then (i,j) else (j,i)
 						(mi',mi'') 	= unzip $ zipWith3 trasfer (elems qs) (elems $ miq ! i') (elems $ miq ! j')
-			if	flex nvs || n >= l 
-				then 	return (nvs !! 1, mq) 
-				else  	corri (n + 1) nvs nmq 
+			if	n >= l 
+				then 	return [(valutazione gs nmq , nmq)] 
+				else  	((valutazione gs nmq , nmq) :) <$> corri (n + 1) nmq 
 			
 
 
@@ -76,7 +82,7 @@ crescita		::   	Parametri
 crescita  p k = Crescita (f k) where
 	f l xs 
 		| l <= 0 = return xs	
-		| otherwise = liftM2 (++) (mix r xs >>= mapM g) (f (l - 1) xs)
+		| otherwise = liftM2 (++) ((fst <$> mix r xs) >>= mapM g) (f (l - 1) xs)
 		where	r = length  xs
 	g (Operatore (Matrice i) _, Operatore (Matrice j) _) = (operatore p . Matrice . zipMatrice (flip ($)) i) <$> mapM (mapM f) j where
 			f x = (id ?? const x) <$> (getRandom :: Rand StdGen Bool) 
@@ -84,7 +90,7 @@ crescita  p k = Crescita (f k) where
 
 data Algoritmo = Algoritmo 
 	{	procedi :: Algoritmo
-	,	consegne :: [(Rapporto, Consegna)]
+	,	consegne :: [(Int, Consegna)]
 	}
 
 algoritmo :: StdGen -> Parametri -> Consegna -> Algoritmo
@@ -100,13 +106,12 @@ mkConsegna epsilon ns = let
 	p = Prodotto $ minimum (map length ns)
 	in Matrice $ listArray (1,u) (map (listArray (1,p) . map (Quantità . flip approxRational epsilon)) $ ns)                  
 
-data Limiti = Massimo Float [Int] | Minimo Float [Int] | Facoltativo Float [Int]
+data Limiti = Massimo Float [Int] | Minimo Float [Int] | Facoltativo Float [Int] deriving (Show)
 
-mkGiudizi :: Float -> [[Limiti]] -> Giudizi
-mkGiudizi epsilon xs = Giudizi . listArray (1, Utente u) . map (map f) $ xs where
-	u = length xs
-	f (Massimo y is) = mkGiudizio is y (<=)
-	f (Minimo y is) = mkGiudizio is y (>=)
+mkGiudizi :: Float -> Utente -> [(Utente,Limiti)] -> Giudizi
+mkGiudizi epsilon u xs = Giudizi . accumArray (flip (:)) [] (1, u) . map (second f) $ xs where
+	f (Massimo y is) = mkGiudizio is y (\y x -> x <= y)
+	f (Minimo y is) = mkGiudizio is y (\y x -> x >= y)
 	f (Facoltativo y is) = mkGiudizio is y (\y x -> x <=0 || x >= y)
-	mkGiudizio is y f = Giudizio (map Prodotto is) (f . Quantità . approxRational epsilon $y)
+	mkGiudizio is y f = Giudizio (map Prodotto is) (f . Quantità . approxRational y $ epsilon)
 
