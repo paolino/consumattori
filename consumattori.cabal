@@ -2,7 +2,7 @@
 -- documentation, see http://haskell.org/cabal/users-guide/
 
 name:                consumattori
-version:             0.1.0.1
+version:             0.1.0.2
 synopsis:            algoritmo consumatori produttori
 -- description:         
 license:             BSD3
@@ -16,5 +16,7 @@ cabal-version:       >=1.8
 data-files: algoritmo.csv
 executable consumattori
   main-is:             consumattori.hs
+  ghc-options: -threaded -Wall -fwarn-tabs -funbox-strict-fields -O2
+               -fno-warn-orphans
   other-modules:       Algoritmo, Istanza, Genetica
-  build-depends:       base ==4.5.*, containers ==0.4.*, HUnit ==1.2.*, binary ==0.5.*, csv ==0.1.*, array ==0.4.*, random ==1.0.*, random-shuffle ==0.0.*, MonadRandom ==0.1.*, cond ==0.4.*, derive ==2.5.*, mtl ==2.0.*, utility-ht ==0.0.*, stm ==2.3.*, parallel ==3.2.*
+  build-depends:       base ==4.5.*, containers ==0.4.*, HUnit ==1.2.*, binary ==0.5.*, csv ==0.1.*, array ==0.4.*, random ==1.0.*, random-shuffle ==0.0.*, MonadRandom ==0.1.*, cond ==0.4.*, derive ==2.5.*, mtl ==2.0.*, utility-ht ==0.0.*, stm ==2.3.*, parallel ==3.2.*, deepseq ==1.3.*
