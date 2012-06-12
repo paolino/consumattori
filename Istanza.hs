@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving,TypeFamilies, FlexibleContexts, BangPatterns, DataKinds, GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving,TypeFamilies, StandaloneDeriving, FlexibleContexts, BangPatterns, DataKinds, GADTs, FlexibleInstances #-}
 -- | Implementazione Genetica da parte di Algoritmo
 module Istanza where
 
@@ -19,6 +19,15 @@ import Data.List (maximumBy)
 import Data.Ord (comparing)
 import Genetica
 import Algoritmo
+import Control.DeepSeq
+
+deriving instance NFData (Matrice Interesse)
+deriving instance NFData (Matrice Quantità)
+deriving instance NFData (Quantità)
+deriving instance NFData (Prodotto)
+deriving instance NFData (Utente)
+instance NFData (Interesse) where
+	rnf _ = ()
 
 type instance Valore (Matrice Quantità) = Int
 type Operatori = Variazioni Soluzioni
@@ -96,7 +105,7 @@ data Algoritmo = Algoritmo
 algoritmo :: StdGen -> Parametri -> Consegna -> Algoritmo
 algoritmo s p@(Parametri _ _ gs nsols nops k) c0@(Matrice qs) = let 
 	nuovo s sols ops = Algoritmo (nuovo s' sols' ops') $ map (second $ \(Soluzione s) -> s) sols' where
-			((ops',sols'), s') = flip runRand s $ passo (taglioClassico nsols) (taglioClassico nops) (crescita p k) (ops,sols)
+			((ops',sols'), s') = flip runRand s $ passoPar (taglioClassico nsols) (taglioClassico nops) (crescita p k) (ops,sols)
 	(s',s'') = split s
 	in nuovo s' [(valutazione gs c0, Soluzione c0)] . flip evalRand s'' $ replicateM nops (operatore p . Matrice <$> mapM (mapM $ const getRandom) qs)
 		
