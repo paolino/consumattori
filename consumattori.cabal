@@ -17,4 +17,4 @@ data-files: algoritmo.csv
 executable consumattori
   main-is:             consumattori.hs
   other-modules:       Algoritmo, Istanza, Genetica
-  build-depends:       base ==4.5.*, containers ==0.4.*, HUnit ==1.2.*, binary ==0.5.*, csv ==0.1.*, array ==0.4.*, random ==1.0.*, random-shuffle ==0.0.*, MonadRandom ==0.1.*, cond ==0.4.*, derive ==2.5.*, mtl ==2.0.*, utility-ht ==0.0.*, stm ==2.3.*
+  build-depends:       base ==4.5.*, containers ==0.4.*, HUnit ==1.2.*, binary ==0.5.*, csv ==0.1.*, array ==0.4.*, random ==1.0.*, random-shuffle ==0.0.*, MonadRandom ==0.1.*, cond ==0.4.*, derive ==2.5.*, mtl ==2.0.*, utility-ht ==0.0.*, stm ==2.3.*, parallel ==3.2.*
